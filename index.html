@@ -134,12 +134,13 @@
       <button role="tab" data-period="mo" aria-selected="false">Month</button>
       <button role="tab" data-period="all" aria-selected="true">All time</button>
     </div>
-    <div class="lb-head disp" aria-hidden="true"><span>Rank</span><span>Region</span><span>Name</span><span>Distance</span></div>
+    <p class="lb-soon" id="lbSoon" hidden><b>Global leaderboard coming soon</b>Until then, here are your own best runs. Beat them!</p>
+    <div class="lb-head disp" aria-hidden="true"><span>Rank</span><span id="lbHeadRegion">Region</span><span>Name</span><span>Distance</span></div>
     <div class="lb-rows" id="lbRows" aria-live="polite"></div>
     <div class="lb-pager"><button id="lbPrev" aria-label="Previous page"><svg class="i" viewBox="0 0 24 24"><path d="M15 4 7 12l8 8"/></svg></button><span id="lbPage">1</span><button id="lbNext" aria-label="Next page"><svg class="i" viewBox="0 0 24 24"><path d="m9 4 8 8-8 8"/></svg></button></div>
   </div>
   <div class="lb-me"><p id="lbMe"></p><button class="ghost disp" id="nameBtn">Change name</button></div>
-  <p class="tip">Every score is checked by replaying the run, so only real runs make the board.</p>
+  <p class="tip" id="lbTip">Every score is checked by replaying the run, so only real runs make the board.</p>
 </div>
 
 <!-- NAME -->

@@ -219,10 +219,10 @@ function die() {
   if (G.daily) {
     const m = Math.floor(x), k = 'ghost:daily:' + G.dayK, g = store.get(k, null), pb = g ? g.d : 0;
     if (m > pb) { store.set(k, { t: encT0(G.toggles), d: m }); G.newBest = pb > 0; }
-    G.gain = Math.floor(m / 20); if (m > 0) LB.submit(m, G.seed, G.toggles.slice(), 'daily');
+    G.gain = Math.floor(m / 20); if (m > 0) { LB.submit(m, G.seed, G.toggles.slice(), 'daily'); MY.add(m, 'daily'); }
   } else if (G.endless) {
     const m = Math.floor(x), pb = store.get('endless', 0); if (m > pb) { store.set('endless', m); G.newBest = pb > 0; }
-    G.gain = Math.floor(m / 25); if (m > 0) LB.submit(m, G.seed, G.toggles.slice()); }
+    G.gain = Math.floor(m / 25); if (m > 0) { LB.submit(m, G.seed, G.toggles.slice()); MY.add(m, 'endless'); } }
   else if (!G.practice) { const pc = Math.floor(100 * Math.min(1, x / G.end)); const k = 'best:' + LEVELS[G.lvl].name; const pb = store.get(k, 0);
     if (pc > pb) { store.set(k, pc); G.newBest = pb > 0 || pc >= 5; G.gain = (Math.floor(pc / 10) - Math.floor(pb / 10)) * TIER[G.lvl]; }
     if (pc >= 60) qAdd('pct60'); }
@@ -859,8 +859,8 @@ setSound(A.on); applySkin(); renderGems();
 // ---------- leaderboard ----------
 // LB is the only part that talks to storage. On claude.ai it uses the artifact's shared db;
 // for your own site, replace init/top/submit/setName/remove with calls to your server API.
-function periodKey(p) {
-  const d = new Date(), y = d.getUTCFullYear(), mo = String(d.getUTCMonth() + 1).padStart(2, '0'), dd = String(d.getUTCDate()).padStart(2, '0');
+function periodKey(p, d = new Date()) {
+  const y = d.getUTCFullYear(), mo = String(d.getUTCMonth() + 1).padStart(2, '0'), dd = String(d.getUTCDate()).padStart(2, '0');
   if (p === 'day') return `${y}-${mo}-${dd}`;
   if (p === 'mo') return `${y}-${mo}`;
   if (p === 'wk') { const t = new Date(Date.UTC(y, d.getUTCMonth(), d.getUTCDate())), wd = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - wd);
@@ -873,6 +873,24 @@ function regionCode() { for (const l of navigator.languages || [navigator.langua
 const flagOf = cc => /^[A-Z]{2}$/.test(cc || '') ? String.fromCodePoint(...[...cc].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)) : '🌐';
 const cleanName = s => String(s || '').replace(/[^\p{L}\p{N} _.\-]/gu, '').replace(/\s+/g, ' ').trim().slice(0, 14);
 const withTimeout = (p, ms = 10000) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej({ code: 'timeout' }), ms))]);
+// MY: each player's own best runs, kept on their device. Shown when the shared board is not available
+// (on your own site), with "Global leaderboard coming soon".
+const MY = {
+  list() {
+    let l = store.get('myruns', null);
+    if (!l) { l = []; const b = store.get('endless', 0); if (b > 0) l.push({ m: b, k: 'end', d: '', ts: 0 }); store.set('myruns', l); }
+    return l;
+  },
+  add(m, kind) {
+    const l = this.list(); l.push({ m, k: kind === 'daily' ? 'dly' : 'end', d: utcDay(), ts: Date.now() });
+    l.sort((a, b) => b.m - a.m); store.set('myruns', l.slice(0, 150));
+  },
+  top(period) {
+    const l = this.list();
+    if (period === 'dly') return l.filter(r => r.k === 'dly' && r.d === utcDay());
+    return l.filter(r => r.k === 'end' && (period === 'all' || r.ts && periodKey(period, new Date(r.ts)) === periodKey(period)));
+  },
+};
 const LB = {
   db: null, user: null, uid: null, mine: null, ok: false, owner: false, q: Promise.resolve(),
   async init() {
@@ -942,10 +960,9 @@ async function openBoard() {
   $('lbTabs').hidden = BD.board === 'dly'; $('lbDaily').hidden = BD.board !== 'dly';
   $('lbDaily').textContent = `Today’s course is the same for everyone. A new one starts in ${untilReset()}.`;
   renderMe();
-  if (!LB.ok) {
-    lbMsg('Leaderboard offline', 'The shared leaderboard works when you’re signed in to Claude and opening this game there. Your Endless best is saved on this device.');
-    return;
-  }
+  $('lbSoon').hidden = LB.ok; $('lbHeadRegion').textContent = LB.ok ? 'Region' : 'Date';
+  $('lbTip').textContent = LB.ok ? 'Every score is checked by replaying the run, so only real runs make the board.' : 'Your runs are saved on this device. Clearing your browser data resets them.';
+  if (!LB.ok) { BD.rows = MY.top(field()).map((r, i) => ({ local: true, id: 'run' + i, m: r.m, ts: r.ts })); BD.page = 0; renderBoard(); renderMe(); return; }
   if (!store.get('lbname', '') && !BD.asked) { BD.asked = true; openName(); }
   const tok = ++BD.token; lbMsg('Loading', 'Fetching the latest runs…');
   let list;
@@ -960,11 +977,18 @@ async function openBoard() {
 }
 function renderBoard() {
   const rows = BD.rows, box = $('lbRows');
+  if (!rows.length && !LB.ok) { lbMsg('No runs yet', BD.board === 'dly' ? 'Play today’s daily challenge and your runs show up here.' : BD.period === 'all' ? 'Play Endless and your best runs show up here.' : 'No Endless runs in this period yet. Go set one.'); return; }
   if (!rows.length) { lbMsg('No runs yet', BD.board === 'dly' ? 'Nobody has played today’s challenge yet. Set the first score.' : BD.period === 'all' ? 'Play Endless to set the first score.' : 'Nobody has played Endless in this period yet. Set the first score.'); return; }
   const pages = Math.ceil(rows.length / PER); BD.page = Math.min(BD.page, pages - 1);
   box.innerHTML = '';
   rows.slice(BD.page * PER, BD.page * PER + PER).forEach((e, i) => {
     const rank = BD.page * PER + i + 1, d = document.createElement('div');
+    if (e.local) {                                    // one of your own runs: rank, date, distance
+      d.className = 'lb-row' + (rank <= 3 ? ' r' + rank : '') + (i === 0 && BD.page === 0 ? ' me' : '');
+      const when = e.ts ? new Date(e.ts).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '–';
+      d.innerHTML = `<span><span class="rk">${rank}</span></span><span class="when">${when}</span><span class="nm">${rank === 1 ? 'Your best run' : 'Your run'}</span><span class="dist">${e.m.toLocaleString()}m</span>`;
+      box.append(d); return;
+    }
     d.className = 'lb-row' + (rank <= 3 ? ' r' + rank : '') + (e.id === LB.uid ? ' me' : '');
     const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = cleanName(e.name) || 'Player';
     if (e.id === LB.uid) { const y = document.createElement('small'); y.textContent = 'You'; nm.append(y); }
@@ -986,7 +1010,7 @@ function renderMe() {
   const dly = BD.board === 'dly', label = dly ? 'today' : { day: 'today', wk: 'this week', mo: 'this month', all: 'all time' }[BD.period];
   const mine = LB.mine, cur = !mine ? 0 : dly ? (mine.dlyK === utcDay() ? mine.dly : 0) : (BD.period === 'all' || mine[BD.period + 'K'] === periodKey(BD.period)) ? mine[BD.period] : 0;
   const lg = store.get('ghost:daily:' + utcDay(), null), local = dly ? (lg ? lg.d : 0) : BD.period === 'all' ? store.get('endless', 0) : 0;
-  const best = LB.ok ? cur : local, idx = BD.rows.findIndex(e => e.id === LB.uid);
+  const mineL = MY.top(BD.board === 'dly' ? 'dly' : BD.period)[0], best = LB.ok ? cur : mineL ? mineL.m : local, idx = BD.rows.findIndex(e => e.id === LB.uid);
   $('lbMe').innerHTML = '';
   const b = document.createElement('b'); b.textContent = name;
   $('lbMe').append(b, document.createTextNode(best ? `, your best ${label}: ${best}m` + (idx >= 0 ? `, rank #${idx + 1}` : '') : dly ? ', no daily run yet today' : `, no Endless run ${BD.period === 'all' ? '' : label + ' '}yet`));

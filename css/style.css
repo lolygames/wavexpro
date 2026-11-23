@@ -353,3 +353,8 @@ a.play { text-decoration: none; }
   .key.in { background: rgba(26,16,70,0.85); color: #fff; box-shadow: none; margin-left: 2px; }
 }
 #nextBtn[hidden] { display: none; }
+
+/* on-device board: "coming soon" note + date column */
+.lb-soon { margin: 4px auto 10px; padding: 10px 14px; border-radius: 12px; background: rgba(255,209,102,0.1); border: 1px dashed rgba(255,209,102,0.5); color: var(--muted); text-align: center; font-size: 14px; line-height: 1.4; }
+.lb-soon b { display: block; color: var(--amber); font: 800 14px Unbounded, system-ui; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px; }
+.lb-row .when { color: var(--muted); font-size: 14px; }
